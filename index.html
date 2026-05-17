@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Markdown Chunker -- AdHub</title>
+<style>
+/* Refined minimalism, AdHub-aligned. Dark default with prefers-color-scheme
+   light fallback. System fonts. 4px spacing scale. 44px touch targets.
+   16px inputs (iOS no-zoom). dvh viewport, safe-area insets. */
+:root {
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px;
+  --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-14: 56px;
+  --s-16: 64px; --s-20: 80px; --s-24: 96px;
+
+  --r-sm: 6px; --r-md: 10px; --r-lg: 16px; --r-xl: 22px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --bg: #0A0B0E;
+  --surface: #0D1117;
+  --raised: #11161F;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #E6EDF3;
+  --text-2: #8B949E;
+  --text-3: #6E7681;
+  --accent: #22D3EE;
+  --accent-hover: #67E8F9;
+  --accent-soft: rgba(34, 211, 238, 0.10);
+  --accent-edge: rgba(34, 211, 238, 0.35);
+  --danger: #F87171;
+  --warn: #FBBF24;
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #FFFFFF;
+    --surface: #FBFBFD;
+    --raised: #F5F5F7;
+    --border: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.16);
+    --text: #1D1D1F;
+    --text-2: #57606A;
+    --text-3: #6E7781;
+    --accent: #0891B2;
+    --accent-hover: #0E7490;
+    --accent-soft: rgba(8, 145, 178, 0.08);
+    --accent-edge: rgba(8, 145, 178, 0.30);
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { height: 100%; }
+body {
+  margin: 0; padding: 0;
+  min-height: 100dvh;
+  background: var(--bg); color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  display: flex; flex-direction: column;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); text-decoration: underline; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+input, select, textarea { font-family: inherit; font-size: 16px; }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--r-sm); }
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+.skip-link {
+  position: absolute;
+  inset-inline-start: var(--s-4);
+  inset-block-start: var(--s-4);
+  padding: var(--s-2) var(--s-4);
+  background: var(--accent); color: var(--bg);
+  font-weight: 600; border-radius: var(--r-sm);
+  transform: translateY(-200%);
+  transition: transform 180ms ease-out;
+  z-index: 100;
+}
+.skip-link:focus { transform: translateY(0); }
+
+/* ---------- Brand ---------- */
+.brand-row {
+  display: flex; justify-content: center;
+  padding-block-start: env(safe-area-inset-top);
+}
+.brand {
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  padding: var(--s-5) 0;
+  text-transform: none;
+}
+.brand .dot { color: var(--accent); }
+@media (min-width: 768px) {
+  .brand { font-size: 14px; padding: var(--s-6) 0; }
+}
+
+/* ---------- Main ---------- */
+main {
+  flex: 1 1 auto; width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
+  padding: var(--s-6) var(--s-5);
+  display: flex; flex-direction: column;
+  gap: var(--s-6);
+}
+@media (min-width: 768px) {
+  main { max-width: 720px; padding-block: var(--s-8); gap: var(--s-8); }
+}
+/* In intake state, vertically center the drop zone. */
+body.is-intake main {
+  justify-content: center;
+  align-items: center;
+  padding-block: var(--s-10) var(--s-10);
+}
+body.is-intake main > #alerts:empty { display: none; }
+
+/* Settings slots */
+#settings-slot-inline:empty { display: none; }
+#settings-slot-bottom {
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
+  padding: var(--s-3) var(--s-5) var(--s-4) var(--s-5);
+}
+@media (min-width: 768px) {
+  #settings-slot-bottom { max-width: 720px; }
+}
+body:not(.is-intake) #settings-slot-bottom:not(:has(#settingsBlock)) { display: none; }
+
+/* ---------- Alerts ---------- */
+.alert {
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  font-size: 14px; line-height: 1.5;
+}
+.alert-info  { background: var(--accent-soft); border: 1px solid var(--accent-edge); color: var(--text); }
+.alert-error { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.30); color: var(--text); }
+.alert-warn  { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.30); color: var(--text); }
+.alert-success { background: rgba(34,211,238,0.06); border: 1px solid rgba(34,211,238,0.25); color: var(--text); }
+
+/* ---------- Drop zone ---------- */
+.drop-zone {
+  position: relative; border: 0; background: transparent;
+  padding: var(--s-6) var(--s-5);
+  text-align: center;
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--s-3); cursor: pointer;
+  transition: transform 160ms ease;
+  border-radius: var(--r-xl);
+  width: 100%; max-width: 480px;
+}
+body:not(.is-intake) .drop-zone { display: none; }
+.drop-zone:hover .drop-icon { color: var(--text-2); }
+.drop-zone.is-dragging .drop-icon,
+.drop-zone.is-dragging .drop-title,
+.drop-zone.is-dragging .drop-sub { color: var(--accent); }
+.drop-zone:focus-visible { box-shadow: var(--focus-ring); }
+.drop-icon {
+  width: 40px; height: 40px; color: var(--text-3);
+  margin-block-end: var(--s-2);
+  transition: color 160ms ease;
+}
+@media (min-width: 768px) {
+  .drop-icon { width: 44px; height: 44px; }
+}
+.drop-title {
+  font-size: 24px; font-weight: 700;
+  letter-spacing: -0.012em; color: var(--text);
+}
+.drop-sub {
+  font-size: 14px; color: var(--text-2);
+  margin-block-end: var(--s-2);
+}
+.drop-cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; padding: var(--s-2) var(--s-6);
+  background: var(--accent); color: var(--accent-fg, var(--bg));
+  border-radius: 999px;
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.005em;
+  transition: background 160ms ease;
+}
+.drop-zone:hover .drop-cta { background: var(--accent-hover); }
+@media (min-width: 768px) {
+  .drop-title { font-size: 28px; }
+}
+
+/* ---------- File card ---------- */
+.file-card {
+  display: flex; align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.file-card-icon {
+  flex: 0 0 auto; width: 28px; height: 28px;
+  color: var(--text-3); margin-block-start: 2px;
+}
+.file-card-body { flex: 1 1 auto; min-width: 0; }
+.file-card-name {
+  font-size: 15px; font-weight: 600;
+  color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.file-card-meta {
+  font-size: 13px; color: var(--text-2);
+  margin-block-start: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.file-card-headings {
+  font-size: 12px; color: var(--text-3);
+  margin-block-start: var(--s-1);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.file-card-replace {
+  flex: 0 0 auto;
+  min-height: 36px; padding: 0 var(--s-3);
+  font-size: 13px; color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.file-card-replace:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- Settings disclosure ---------- */
+.settings {
+  display: flex; flex-direction: column;
+  align-items: stretch;
+}
+body.is-intake #settings-slot-bottom .settings {
+  align-items: center;
+}
+.settings summary {
+  cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  min-height: 36px; padding: var(--s-2) var(--s-3);
+  font-size: 14px; font-weight: 500; color: var(--text-2);
+  border-radius: var(--r-sm);
+  transition: color 160ms ease;
+  align-self: flex-start;
+}
+body.is-intake #settings-slot-bottom .settings summary { align-self: center; }
+.settings summary::-webkit-details-marker { display: none; }
+.settings summary::after {
+  content: ""; width: 8px; height: 8px;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-start: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-2px, 2px);
+  transition: transform 200ms ease;
+}
+.settings[open] summary::after {
+  transform: rotate(135deg) translate(-2px, 2px);
+}
+.settings summary:hover { color: var(--text); }
+.settings-body {
+  margin-block-start: var(--s-4);
+  padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: grid; grid-template-columns: 1fr;
+  gap: var(--s-5);
+  width: 100%;
+}
+@media (min-width: 600px) {
+  .settings-body { grid-template-columns: 1fr 1fr; }
+}
+.setting-field { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; }
+.setting-field > label {
+  font-size: 13px; font-weight: 500; color: var(--text-2);
+}
+.setting-field .hint { font-size: 12px; color: var(--text-3); line-height: 1.45; }
+.setting-field select,
+.setting-field input[type="number"] {
+  min-height: 44px; padding: var(--s-2) var(--s-3);
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm); width: 100%;
+}
+.setting-field select:focus-visible,
+.setting-field input:focus-visible { border-color: var(--accent); }
+.mode-row { display: flex; gap: var(--s-2); }
+.mode-pill {
+  flex: 1 1 0; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: var(--s-2) var(--s-3);
+  background: var(--bg); color: var(--text-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  font-size: 14px; font-weight: 500;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.mode-pill.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-edge);
+  color: var(--accent);
+  font-weight: 600;
+}
+.size-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+
+/* ---------- Compute row ---------- */
+.compute-row { display: flex; justify-content: stretch; }
+.compute-row .btn-primary { width: 100%; }
+@media (min-width: 600px) {
+  .compute-row { justify-content: flex-end; }
+  .compute-row .btn-primary { width: auto; min-width: 200px; }
+}
+
+/* ---------- Buttons ---------- */
+.btn-secondary {
+  min-height: 44px; padding: var(--s-2) var(--s-4);
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: transparent; color: var(--text);
+  font-size: 14px; font-weight: 500;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary {
+  min-height: 44px; padding: var(--s-2) var(--s-5);
+  background: var(--accent); color: var(--bg);
+  border-radius: var(--r-sm);
+  font-size: 14px; font-weight: 600;
+  transition: background 160ms ease;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- Progress card ---------- */
+.progress-card {
+  display: none; padding: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.progress-card.is-active { display: block; }
+.progress-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-4); margin-block-end: var(--s-3);
+}
+.progress-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.progress-meta {
+  font-size: 13px; color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.progress-bar {
+  width: 100%; height: 4px;
+  background: var(--raised);
+  border-radius: 999px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; background: var(--accent);
+  width: 0%; transition: width 160ms ease-out;
+}
+.progress-fill.is-indeterminate {
+  width: 30%;
+  animation: indet 1.4s ease-in-out infinite;
+}
+@keyframes indet {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+/* ---------- Results ---------- */
+.results { display: none; }
+.results.is-active { display: block; }
+.results-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--s-4);
+  margin-block-end: var(--s-5);
+}
+.results-title {
+  margin: 0; font-size: 22px; font-weight: 600;
+  letter-spacing: -0.012em;
+}
+.results-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+.stats {
+  margin-block-end: var(--s-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--s-2);
+}
+.stat {
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.stat-label {
+  font-size: 11px; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.stat-value {
+  font-size: 20px; font-weight: 600; color: var(--text);
+  margin-block-start: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Results toolbar ---------- */
+.results-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--s-3);
+  margin-block-end: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.results-toolbar .tb-group {
+  display: flex; gap: var(--s-2); align-items: center;
+}
+.results-toolbar .tb-count {
+  font-size: 13px; color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.results-toolbar .tb-count strong { color: var(--accent); font-weight: 600; }
+.tb-btn {
+  font-size: 12px; padding: 4px 10px;
+  min-height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.tb-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tb-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tb-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-2);
+  cursor: pointer; min-height: 30px;
+}
+.tb-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.tb-toggle:hover { color: var(--text); }
+
+/* ---------- File chips ---------- */
+.file-list {
+  display: flex; flex-wrap: wrap; gap: var(--s-2);
+  margin-block-end: var(--s-5);
+}
+.file-chip {
+  display: inline-flex; align-items: stretch;
+  min-height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  max-width: 100%;
+  transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+}
+.file-chip:hover { border-color: var(--border-strong); }
+.file-chip.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-edge);
+}
+.file-chip.is-warn { border-color: rgba(251,191,36,0.35); }
+.file-chip.is-warn.is-active { background: rgba(251,191,36,0.10); }
+.file-chip[data-included="false"] { opacity: 0.45; }
+.file-chip[data-included="false"] .chip-name { text-decoration: line-through; }
+
+.chip-toggle {
+  flex: 0 0 auto;
+  width: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0;
+  color: var(--text-3);
+  cursor: pointer;
+  border-inline-end: 1px solid var(--border);
+  transition: color 160ms ease, background 160ms ease;
+}
+.chip-toggle:hover { background: var(--raised); color: var(--text); }
+.file-chip[data-included="true"] .chip-toggle { color: var(--accent); }
+.file-chip[data-included="true"].is-warn .chip-toggle { color: var(--warn); }
+.chip-toggle svg { width: 14px; height: 14px; }
+
+.chip-body {
+  flex: 1 1 auto; min-width: 0;
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  padding: 0 var(--s-3) 0 var(--s-3);
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text-2);
+  font-size: 13px;
+  height: auto;
+  max-width: 100%;
+}
+.file-chip.is-active .chip-body { color: var(--accent); font-weight: 600; }
+.file-chip.is-warn .chip-body { color: var(--warn); }
+.chip-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 220px; font-family: var(--font-mono); font-size: 12px;
+}
+.chip-status {
+  font-size: 11px; color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.file-chip.is-active .chip-status { color: var(--accent); }
+.file-chip.is-warn .chip-status { color: var(--warn); }
+.chip-tag {
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 8px;
+  background: var(--raised); color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.file-chip.is-active .chip-tag { background: rgba(34,211,238,0.18); color: var(--accent); }
+
+/* ---------- Chunk panel ---------- */
+.chunk-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.chunk-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--raised);
+  border-block-end: 1px solid var(--border);
+}
+.chunk-panel-meta { min-width: 0; flex: 1 1 auto; }
+.chunk-panel-name {
+  font-family: var(--font-mono); font-size: 13px;
+  color: var(--text); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chunk-panel-sub {
+  font-size: 12px; color: var(--text-2);
+  margin-block-start: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.chunk-panel-actions { display: flex; gap: var(--s-2); flex: 0 0 auto; }
+.raw-md {
+  display: block; width: 100%;
+  min-height: 240px; max-height: 60dvh;
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 0; outline: none;
+  color: var(--text);
+  font-family: var(--font-mono); font-size: 13px;
+  line-height: 1.55; resize: vertical;
+  overflow: auto; white-space: pre;
+  tab-size: 2;
+}
+
+/* ---------- Footer ---------- */
+footer {
+  padding: var(--s-6) var(--s-5);
+  padding-block-end: max(var(--s-6), env(safe-area-inset-bottom));
+  text-align: center; color: var(--text-3);
+  font-size: 12px;
+}
+footer a { color: var(--text-2); }
+footer a:hover { color: var(--accent); }
+
+/* ---------- About dialog ---------- */
+dialog {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-6);
+  max-width: 480px; width: calc(100% - var(--s-8));
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+dialog::backdrop { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+dialog h2 {
+  margin: 0 0 var(--s-3);
+  font-size: 20px; font-weight: 600;
+  letter-spacing: -0.012em;
+}
+dialog p { color: var(--text-2); font-size: 14px; margin: 0 0 var(--s-3); }
+dialog p:last-of-type { margin-bottom: var(--s-5); }
+dialog .modal-actions { display: flex; justify-content: flex-end; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+</style>
+</head>
+<body class="is-intake">
+<a class="skip-link" href="#main">Skip to main</a>
+
+<div class="brand-row">
+  <span class="brand">MD<span class="dot">.</span>CHUNK</span>
+</div>
+
+<main id="main">
+  <button class="drop-zone" id="dropZone" type="button" aria-describedby="dropSub">
+    <svg class="drop-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="26" height="26" rx="4"/>
+      <path d="M16 10 v12"/>
+      <path d="M11 17 l5 5 5-5"/>
+    </svg>
+    <span class="drop-title">Drop markdown here</span>
+    <span class="drop-sub" id="dropSub">single file, click to choose</span>
+    <span class="drop-cta">Choose file</span>
+  </button>
+  <input type="file" id="fileInput" accept=".md,.markdown,text/markdown" class="sr-only">
+
+  <div id="alerts" aria-live="polite"></div>
+
+  <div class="file-card" id="fileCard" hidden>
+    <svg class="file-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+    <div class="file-card-body">
+      <div class="file-card-name" id="fileName"></div>
+      <div class="file-card-meta" id="fileMeta"></div>
+      <div class="file-card-headings" id="fileHeadings"></div>
+    </div>
+    <button class="file-card-replace" id="replaceBtn" type="button">Replace</button>
+  </div>
+
+  <div id="settings-slot-inline"></div>
+
+  <div class="compute-row" id="computeRow" hidden>
+    <button class="btn-primary" id="computeBtn" type="button">Compute split</button>
+  </div>
+
+  <div class="progress-card" id="progressCard" role="status" aria-live="polite">
+    <div class="progress-header">
+      <span class="progress-title" id="progressTitle">Working</span>
+      <span class="progress-meta" id="progressMeta"></span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <section class="results" id="results" aria-label="Split result">
+    <div class="results-header">
+      <h2 class="results-title" id="resultsTitle">Result</h2>
+      <div class="results-actions">
+        <button class="btn-secondary" id="individualBtn" type="button">Download all</button>
+        <button class="btn-primary" id="zipBtn" type="button">Download ZIP</button>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="results-toolbar" id="resultsToolbar">
+      <span class="tb-count" id="selectionCount">0 selected</span>
+      <div class="tb-group">
+        <button class="tb-btn" id="selectAllBtn" type="button">Select all</button>
+        <button class="tb-btn" id="deselectAllBtn" type="button">Deselect all</button>
+        <button class="tb-btn" id="excludeImagesBtn" type="button" title="Auto-detect chunks dominated by base64 image/PDF embeds and deselect them">Exclude images</button>
+      </div>
+      <div class="tb-group">
+        <label class="tb-toggle">
+          <input type="checkbox" id="sequentialToggle">
+          <span>Sequential suffix (basename_1, basename_2, ...)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="file-list" id="chunkList" role="tablist" aria-label="Chunks"></div>
+
+    <div class="chunk-panel" id="chunkPanel" hidden>
+      <div class="chunk-panel-header">
+        <div class="chunk-panel-meta">
+          <div class="chunk-panel-name" id="chunkName"></div>
+          <div class="chunk-panel-sub" id="chunkSub"></div>
+        </div>
+        <div class="chunk-panel-actions">
+          <button class="btn-secondary" id="chunkToggleBtn" type="button">Exclude</button>
+          <button class="btn-secondary" id="chunkDownloadBtn" type="button">Download</button>
+        </div>
+      </div>
+      <textarea class="raw-md" id="chunkContent" readonly spellcheck="false" aria-label="Chunk content"></textarea>
+    </div>
+  </section>
+</main>
+
+<div id="settings-slot-bottom">
+  <details class="settings" id="settingsBlock">
+    <summary>Split settings</summary>
+    <div class="settings-body">
+      <div class="setting-field" style="grid-column: 1 / -1;">
+        <label>Split mode</label>
+        <div class="mode-row" role="radiogroup" aria-label="Split mode">
+          <button type="button" class="mode-pill is-active" id="modeSize" role="radio" aria-checked="true" data-mode="size">By size</button>
+          <button type="button" class="mode-pill" id="modeHeading" role="radio" aria-checked="false" data-mode="heading">By heading</button>
+        </div>
+      </div>
+
+      <div class="setting-field" id="sizeField">
+        <label for="sizeValue">Target chunk size</label>
+        <div class="size-inputs">
+          <input type="number" id="sizeValue" min="1" max="102400" value="1" step="1">
+          <select id="sizeUnit">
+            <option value="KB">KB</option>
+            <option value="MB" selected>MB</option>
+          </select>
+        </div>
+        <span class="hint">Tolerance plus or minus 10 percent. Code fences kept intact when possible.</span>
+      </div>
+
+      <div class="setting-field" id="headingField" hidden>
+        <label for="headingLevel">Heading level</label>
+        <select id="headingLevel">
+          <option value="1">H1</option>
+          <option value="2" selected>H2</option>
+          <option value="3">H3</option>
+          <option value="4">H4</option>
+          <option value="5">H5</option>
+          <option value="6">H6</option>
+        </select>
+        <span class="hint">Each chunk starts at a heading of this level or shallower.</span>
+      </div>
+    </div>
+  </details>
+</div>
+
+<footer>
+  <a href="#" id="aboutLink">About this tool</a>
+</footer>
+
+<dialog id="aboutModal" aria-labelledby="aboutTitle">
+  <h2 id="aboutTitle">About Markdown Chunker</h2>
+  <p>Splits a markdown file into smaller pieces by target size or by heading boundary. All processing happens in your browser. Nothing is uploaded.</p>
+  <p>Part of AdHub, an open collection of single-file offline tools. Works fully from a local file with no internet connection.</p>
+  <p style="font-size:12px; color: var(--text-3);">UTF-8 safe byte counting. Code fences kept intact when possible. ZIP packaging via inline STORE-method writer (no compression, valid everywhere).</p>
+  <div class="modal-actions">
+    <button class="btn-primary" id="closeAbout" type="button">Close</button>
+  </div>
+</dialog>
+
+<script>
+// CRC32 + minimal STORE-method ZIP writer (~60 lines vs 100KB JSZip).
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function dosDateTime(d) {
+  d = d || new Date();
+  const time = ((d.getHours() & 0x1f) << 11) | ((d.getMinutes() & 0x3f) << 5) | ((d.getSeconds() >>> 1) & 0x1f);
+  const date = (((d.getFullYear() - 1980) & 0x7f) << 9) | (((d.getMonth() + 1) & 0xf) << 5) | (d.getDate() & 0x1f);
+  return { time, date };
+}
+function buildZip(entries) {
+  const enc = new TextEncoder();
+  const { time, date } = dosDateTime();
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const e of entries) {
+    const nameBytes = enc.encode(e.name);
+    const data = e.data;
+    const cr = crc32(data);
+    const lfh = new Uint8Array(30 + nameBytes.length);
+    const dv = new DataView(lfh.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 0x0800, true);
+    dv.setUint16(8, 0, true);
+    dv.setUint16(10, time, true);
+    dv.setUint16(12, date, true);
+    dv.setUint32(14, cr, true);
+    dv.setUint32(18, data.length, true);
+    dv.setUint32(22, data.length, true);
+    dv.setUint16(26, nameBytes.length, true);
+    dv.setUint16(28, 0, true);
+    lfh.set(nameBytes, 30);
+    locals.push(lfh, data);
+
+    const cdh = new Uint8Array(46 + nameBytes.length);
+    const dv2 = new DataView(cdh.buffer);
+    dv2.setUint32(0, 0x02014b50, true);
+    dv2.setUint16(4, 20, true);
+    dv2.setUint16(6, 20, true);
+    dv2.setUint16(8, 0x0800, true);
+    dv2.setUint16(10, 0, true);
+    dv2.setUint16(12, time, true);
+    dv2.setUint16(14, date, true);
+    dv2.setUint32(16, cr, true);
+    dv2.setUint32(20, data.length, true);
+    dv2.setUint32(24, data.length, true);
+    dv2.setUint16(28, nameBytes.length, true);
+    dv2.setUint16(30, 0, true);
+    dv2.setUint16(32, 0, true);
+    dv2.setUint16(34, 0, true);
+    dv2.setUint16(36, 0, true);
+    dv2.setUint32(38, 0, true);
+    dv2.setUint32(42, offset, true);
+    cdh.set(nameBytes, 46);
+    centrals.push(cdh);
+    offset += lfh.length + data.length;
+  }
+  const localSize = offset;
+  let cdSize = 0;
+  for (const p of centrals) cdSize += p.length;
+  const eocd = new Uint8Array(22);
+  const dv3 = new DataView(eocd.buffer);
+  dv3.setUint32(0, 0x06054b50, true);
+  dv3.setUint16(4, 0, true);
+  dv3.setUint16(6, 0, true);
+  dv3.setUint16(8, entries.length, true);
+  dv3.setUint16(10, entries.length, true);
+  dv3.setUint32(12, cdSize, true);
+  dv3.setUint32(16, localSize, true);
+  dv3.setUint16(20, 0, true);
+  const out = new Uint8Array(localSize + cdSize + 22);
+  let pos = 0;
+  for (const p of locals) { out.set(p, pos); pos += p.length; }
+  for (const p of centrals) { out.set(p, pos); pos += p.length; }
+  out.set(eocd, pos);
+  return out;
+}
+
+// ============================================================================
+const enc = new TextEncoder();
+let state = {
+  file: null, text: '', lines: [], headingCounts: [0,0,0,0,0,0],
+  basename: '', chunks: null, selectedChunk: -1, mode: 'size',
+};
+
+function formatBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / (1024 * 1024)).toFixed(2) + ' MB';
+}
+function sanitizeBasename(name) {
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return base.replace(/[^A-Za-z0-9._-]/g, '-').replace(/^-+|-+$/g, '') || 'document';
+}
+function slugify(text) {
+  return text
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '') || 'section';
+}
+function pad(n, w) {
+  const s = String(n);
+  return s.length >= w ? s : '0'.repeat(w - s.length) + s;
+}
+const HEADING_RE = /^(#{1,6})\s+(.+?)\s*$/;
+const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/;
+function fenceOpenChar(line) {
+  const m = line.match(FENCE_RE);
+  return m ? m[1][0] : null;
+}
+function setAlert(msg, kind) {
+  const el = document.getElementById('alerts');
+  if (!msg) { el.innerHTML = ''; return; }
+  const cls = 'alert alert-' + (kind || 'info');
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = msg;
+  el.innerHTML = '';
+  el.appendChild(div);
+}
+
+function readFile(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(new Error('File read failed: ' + (r.error && r.error.message || 'unknown')));
+    r.onload = () => resolve(r.result);
+    r.readAsText(file, 'utf-8');
+  });
+}
+function analyzeFile(text) {
+  const lines = text.split(/\r\n|\r|\n/);
+  const headingCounts = [0,0,0,0,0,0];
+  let fenceChar = null;
+  for (const line of lines) {
+    const oc = fenceOpenChar(line);
+    if (oc) {
+      if (fenceChar === null) fenceChar = oc;
+      else if (oc === fenceChar) fenceChar = null;
+      continue;
+    }
+    if (fenceChar !== null) continue;
+    const m = line.match(HEADING_RE);
+    if (m) headingCounts[m[1].length - 1]++;
+  }
+  return { lines, headingCounts };
+}
+
+async function splitBySize(lines, targetBytes, onProgress) {
+  const lower = Math.floor(targetBytes * 0.9);
+  const upper = Math.ceil(targetBytes * 1.1);
+  // In-fence cap. Lower than before: spec allows one oversized chunk per giant
+  // fence, but don't let an unclosed/runaway fence eat the whole file.
+  const fenceCap = Math.max(upper * 2, targetBytes * 2);
+  const chunks = [];
+  const oversizedFlags = [];
+  let buf = [];
+  let bufBytes = 0;
+  let fenceChar = null;
+  let lastSafeIdx = 0;
+  let lastSafeBytes = 0;
+  const total = lines.length;
+  let yieldClock = Date.now();
+
+  function emit(flag) {
+    if (!buf.length) return;
+    chunks.push(buf.join('\n'));
+    oversizedFlags.push(!!flag);
+    buf = [];
+    bufBytes = 0;
+    lastSafeIdx = 0;
+    lastSafeBytes = 0;
+  }
+  function splitAtSafe() {
+    const tail = buf.slice(lastSafeIdx);
+    const tailBytes = bufBytes - lastSafeBytes;
+    buf = buf.slice(0, lastSafeIdx);
+    emit(false);
+    buf = tail;
+    bufBytes = tailBytes;
+  }
+
+  for (let i = 0; i < total; i++) {
+    const line = lines[i];
+    const isLast = i === total - 1;
+    const lineBytes = enc.encode(line).length + (isLast ? 0 : 1);
+
+    // PRE-ADD: if pushing this line would exceed upper, split first.
+    // This is the key fix for files where a single line is itself huge
+    // (PDF-converted markdown with base64 embeds, runaway log dumps, etc).
+    if (buf.length > 0 && bufBytes + lineBytes > upper) {
+      if (fenceChar === null) {
+        if (lastSafeBytes >= lower) {
+          splitAtSafe();
+        } else {
+          // No safe blank-line; emit whatever we have so the upcoming line
+          // gets a fresh chunk (which may itself be oversized if huge).
+          emit(false);
+        }
+      } else if (bufBytes + lineBytes > fenceCap) {
+        // In-fence runaway. Force split and stop tracking the fence.
+        emit(true);
+        fenceChar = null;
+      }
+      // else: in fence, still within fenceCap, keep accumulating
+    }
+
+    // PUSH the line
+    buf.push(line);
+    bufBytes += lineBytes;
+
+    // Fence toggle
+    const oc = fenceOpenChar(line);
+    if (oc) {
+      if (fenceChar === null) fenceChar = oc;
+      else if (oc === fenceChar) fenceChar = null;
+    }
+
+    // Track safe split points (blank lines outside fences, within tolerance)
+    if (fenceChar === null && line.trim() === '' && bufBytes >= lower) {
+      lastSafeIdx = buf.length;
+      lastSafeBytes = bufBytes;
+    }
+
+    // POST-ADD: a single line that is itself oversized becomes its own chunk.
+    if (fenceChar === null && buf.length === 1 && bufBytes > upper) {
+      emit(true);
+      continue;
+    }
+
+    // POST-ADD: paragraph-boundary split at or above target.
+    if (fenceChar === null && bufBytes >= targetBytes && line.trim() === '') {
+      emit(false);
+    }
+
+    if (Date.now() - yieldClock > 50) {
+      onProgress && onProgress(i / total);
+      yieldClock = Date.now();
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  if (buf.length) emit(bufBytes > upper);
+  return { chunks, oversizedFlags };
+}
+
+async function splitByHeading(lines, selectedLevel, onProgress) {
+  const total = lines.length;
+  let fenceChar = null;
+  let preamble = [];
+  let current = null;
+  const chunks = [];
+  let yieldClock = Date.now();
+  for (let i = 0; i < total; i++) {
+    const line = lines[i];
+    const oc = fenceOpenChar(line);
+    let toggleAfter = !!oc && (fenceChar === null || oc === fenceChar);
+    let handled = false;
+    if (fenceChar === null) {
+      const m = line.match(HEADING_RE);
+      if (m) {
+        const level = m[1].length;
+        if (level <= selectedLevel) {
+          if (current) chunks.push(current);
+          current = { heading: m[2], slug: slugify(m[2]), lines: [line] };
+          handled = true;
+        }
+      }
+    }
+    if (!handled) {
+      if (current) current.lines.push(line);
+      else preamble.push(line);
+    }
+    if (toggleAfter) {
+      fenceChar = fenceChar === null ? oc : null;
+    }
+    if (Date.now() - yieldClock > 50) {
+      onProgress && onProgress(i / total);
+      yieldClock = Date.now();
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+  if (current) chunks.push(current);
+  const hasPreamble = preamble.length && preamble.some(l => l.trim() !== '');
+  if (hasPreamble) chunks.unshift({ heading: null, slug: 'preamble', lines: preamble, isPreamble: true });
+  return { chunks, hasPreamble };
+}
+
+function detectImageChunk(text) {
+  if (!text) return false;
+  // Strong signals: data URLs for image/PDF/binary embeds.
+  if (/data:image\/[a-z0-9.+-]+;base64,/i.test(text)) return true;
+  if (/data:application\/pdf;base64,/i.test(text)) return true;
+  if (/data:application\/octet-stream;base64,/i.test(text)) return true;
+  // Heuristic: dominated by long base64 runs.
+  let base64Bytes = 0;
+  const re = /[A-Za-z0-9+/=]{200,}/g;
+  let m;
+  while ((m = re.exec(text)) !== null) base64Bytes += m[0].length;
+  return text.length > 0 && (base64Bytes / text.length) > 0.5;
+}
+
+function buildChunkRecords(splitResult, mode, basename) {
+  if (mode === 'size') {
+    const { chunks, oversizedFlags } = splitResult;
+    const width = Math.max(1, String(chunks.length).length);
+    return chunks.map((text, i) => ({
+      index: i + 1,
+      filename: basename + '-' + pad(i + 1, width) + '.md',
+      text,
+      bytes: enc.encode(text).length,
+      lineCount: text.split('\n').length,
+      firstHeading: extractFirstHeading(text),
+      oversized: !!oversizedFlags[i],
+      isImage: detectImageChunk(text),
+      selected: true,
+    }));
+  } else {
+    const { chunks, hasPreamble } = splitResult;
+    const nonPreambleCount = hasPreamble ? chunks.length - 1 : chunks.length;
+    const width = Math.max(3, String(nonPreambleCount).length);
+    let nonPreambleIdx = 0;
+    return chunks.map((c, i) => {
+      const text = c.lines.join('\n');
+      let name;
+      if (c.isPreamble) {
+        name = basename + '-' + pad(0, width) + '-preamble.md';
+      } else {
+        nonPreambleIdx++;
+        name = basename + '-' + pad(nonPreambleIdx, width) + '-' + c.slug + '.md';
+      }
+      return {
+        index: i + 1, filename: name, text,
+        bytes: enc.encode(text).length,
+        lineCount: c.lines.length,
+        firstHeading: c.heading ? '#'.repeat(headingLevelOf(c.lines[0])) + ' ' + c.heading : extractFirstHeading(text),
+        oversized: false,
+        isImage: detectImageChunk(text),
+        selected: true,
+      };
+    });
+  }
+}
+function headingLevelOf(line) {
+  const m = line && line.match(HEADING_RE);
+  return m ? m[1].length : 0;
+}
+function extractFirstHeading(text) {
+  const lines = text.split('\n');
+  let fenceChar = null;
+  for (const line of lines) {
+    const oc = fenceOpenChar(line);
+    if (oc) {
+      if (fenceChar === null) fenceChar = oc;
+      else if (oc === fenceChar) fenceChar = null;
+      continue;
+    }
+    if (fenceChar !== null) continue;
+    const m = line.match(HEADING_RE);
+    if (m) return line.trim();
+  }
+  return null;
+}
+
+function moveSettingsTo(slotId) {
+  const sb = document.getElementById('settingsBlock');
+  const slot = document.getElementById(slotId);
+  if (sb && slot && sb.parentNode !== slot) slot.appendChild(sb);
+}
+function setBodyState(state) {
+  document.body.classList.toggle('is-intake', state === 'intake');
+  document.body.classList.toggle('is-loaded', state !== 'intake');
+}
+
+function renderFileCard() {
+  document.getElementById('fileCard').hidden = false;
+  document.getElementById('fileName').textContent = state.file.name;
+  document.getElementById('fileMeta').textContent =
+    formatBytes(state.file.size) + ' \u00b7 ' +
+    state.lines.length.toLocaleString() + ' lines \u00b7 ' +
+    state.text.length.toLocaleString() + ' chars';
+  const counts = state.headingCounts;
+  const parts = [];
+  for (let i = 0; i < 6; i++) {
+    if (counts[i] > 0) parts.push('H' + (i+1) + ': ' + counts[i]);
+  }
+  document.getElementById('fileHeadings').textContent = parts.length ? parts.join('  \u00b7  ') : 'No headings detected';
+  setBodyState('loaded');
+  moveSettingsTo('settings-slot-inline');
+  const sb = document.getElementById('settingsBlock');
+  sb.open = true;
+  document.getElementById('computeRow').hidden = false;
+}
+
+function renderStats(records) {
+  const sizes = records.map(r => r.bytes);
+  const total = sizes.reduce((a, b) => a + b, 0);
+  const cards = [
+    ['Chunks', records.length],
+    ['Total', formatBytes(total)],
+    ['Smallest', formatBytes(Math.min.apply(null, sizes))],
+    ['Largest', formatBytes(Math.max.apply(null, sizes))],
+    ['Average', formatBytes(Math.round(total / records.length))],
+  ];
+  const el = document.getElementById('stats');
+  el.innerHTML = '';
+  for (const [label, value] of cards) {
+    const d = document.createElement('div');
+    d.className = 'stat';
+    const l = document.createElement('div'); l.className = 'stat-label'; l.textContent = label;
+    const v = document.createElement('div'); v.className = 'stat-value'; v.textContent = value;
+    d.appendChild(l); d.appendChild(v);
+    el.appendChild(d);
+  }
+}
+
+const ICON_CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8.5 6.5 12 13 4.5"/></svg>';
+const ICON_CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
+
+function renderChunkList(records) {
+  const el = document.getElementById('chunkList');
+  el.innerHTML = '';
+  records.forEach((r, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip' + (r.oversized ? ' is-warn' : '');
+    if (i === state.selectedChunk) chip.classList.add('is-active');
+    chip.dataset.idx = i;
+    chip.dataset.included = r.selected ? 'true' : 'false';
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'chip-toggle';
+    toggle.setAttribute('aria-label', r.selected ? 'Exclude from download' : 'Include in download');
+    toggle.setAttribute('title', r.selected ? 'Exclude' : 'Include');
+    toggle.innerHTML = r.selected ? ICON_CHECK : ICON_CROSS;
+    toggle.addEventListener('click', e => { e.stopPropagation(); toggleChunkSelection(i); });
+
+    const body = document.createElement('button');
+    body.type = 'button';
+    body.className = 'chip-body';
+    body.setAttribute('role', 'tab');
+    body.setAttribute('aria-selected', i === state.selectedChunk ? 'true' : 'false');
+
+    const name = document.createElement('span');
+    name.className = 'chip-name';
+    name.textContent = r.filename;
+    body.appendChild(name);
+
+    if (r.isImage) {
+      const tag = document.createElement('span');
+      tag.className = 'chip-tag';
+      tag.textContent = 'img';
+      body.appendChild(tag);
+    }
+
+    const status = document.createElement('span');
+    status.className = 'chip-status';
+    status.textContent = formatBytes(r.bytes) + (r.oversized ? ' !' : '');
+    body.appendChild(status);
+
+    body.addEventListener('click', () => selectChunk(i));
+
+    chip.appendChild(toggle);
+    chip.appendChild(body);
+    el.appendChild(chip);
+  });
+  updateSelectionCount();
+}
+
+function updateSelectionCount() {
+  if (!state.chunks) {
+    document.getElementById('selectionCount').textContent = '0 selected';
+    return;
+  }
+  const total = state.chunks.length;
+  const sel = state.chunks.filter(c => c.selected).length;
+  const imgs = state.chunks.filter(c => c.isImage).length;
+  const imgsExcluded = state.chunks.filter(c => c.isImage && !c.selected).length;
+  const el = document.getElementById('selectionCount');
+  el.innerHTML = '';
+  const strong = document.createElement('strong');
+  strong.textContent = sel + ' of ' + total;
+  el.appendChild(strong);
+  el.appendChild(document.createTextNode(' selected' + (imgs ? ' \u00b7 ' + imgs + ' image' + (imgs === 1 ? '' : 's') + ' detected' : '')));
+  document.getElementById('excludeImagesBtn').disabled = (imgs === 0) || (imgsExcluded === imgs);
+  document.getElementById('selectAllBtn').disabled = sel === total;
+  document.getElementById('deselectAllBtn').disabled = sel === 0;
+}
+
+function toggleChunkSelection(idx) {
+  if (!state.chunks || !state.chunks[idx]) return;
+  state.chunks[idx].selected = !state.chunks[idx].selected;
+  renderChunkList(state.chunks);
+  if (idx === state.selectedChunk) selectChunk(idx);
+}
+function setAllSelection(value) {
+  if (!state.chunks) return;
+  state.chunks.forEach(c => { c.selected = !!value; });
+  renderChunkList(state.chunks);
+  if (state.selectedChunk >= 0) selectChunk(state.selectedChunk);
+}
+function excludeImagesNow() {
+  if (!state.chunks) return;
+  let n = 0;
+  state.chunks.forEach(c => { if (c.isImage && c.selected) { c.selected = false; n++; } });
+  renderChunkList(state.chunks);
+  if (state.selectedChunk >= 0) selectChunk(state.selectedChunk);
+  if (n > 0) setAlert(n + ' image chunk' + (n === 1 ? '' : 's') + ' excluded.', 'info');
+  else setAlert('No image chunks to exclude.', 'info');
+}
+
+function selectChunk(idx) {
+  state.selectedChunk = idx;
+  const chips = document.querySelectorAll('.file-chip');
+  chips.forEach((c, i) => {
+    c.classList.toggle('is-active', i === idx);
+    const body = c.querySelector('.chip-body');
+    if (body) body.setAttribute('aria-selected', i === idx ? 'true' : 'false');
+  });
+  if (idx < 0 || !state.chunks || !state.chunks[idx]) {
+    document.getElementById('chunkPanel').hidden = true;
+    return;
+  }
+  const r = state.chunks[idx];
+  document.getElementById('chunkPanel').hidden = false;
+  document.getElementById('chunkName').textContent = r.filename;
+  const subParts = [formatBytes(r.bytes), r.lineCount + ' lines'];
+  if (r.firstHeading) subParts.push(r.firstHeading.length > 60 ? r.firstHeading.slice(0,57)+'...' : r.firstHeading);
+  if (r.oversized) subParts.push('oversized fence');
+  if (r.isImage) subParts.push('image embed');
+  if (!r.selected) subParts.push('excluded');
+  document.getElementById('chunkSub').textContent = subParts.join(' \u00b7 ');
+  document.getElementById('chunkContent').value = r.text;
+  const tb = document.getElementById('chunkToggleBtn');
+  tb.textContent = r.selected ? 'Exclude' : 'Include';
+}
+
+function renderResults(records) {
+  state.chunks = records;
+  document.getElementById('results').classList.add('is-active');
+  const oversizedCount = records.filter(r => r.oversized).length;
+  document.getElementById('resultsTitle').textContent =
+    records.length + ' chunk' + (records.length === 1 ? '' : 's');
+  renderStats(records);
+  renderChunkList(records);
+  selectChunk(0);
+  if (oversizedCount) {
+    setAlert(oversizedCount + ' chunk' + (oversizedCount === 1 ? '' : 's') +
+      ' exceeded the target because of a long code fence. Flagged in warning color.', 'warn');
+  } else {
+    setAlert('', null);
+  }
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function getSelectedRecords() {
+  if (!state.chunks) return [];
+  return state.chunks.filter(c => c.selected);
+}
+function useSequentialNames() {
+  const el = document.getElementById('sequentialToggle');
+  return el && el.checked;
+}
+function outputName(record, position, total, useSeq) {
+  if (!useSeq) return record.filename;
+  const width = Math.max(1, String(total).length);
+  return state.basename + '_' + pad(position, width) + '.md';
+}
+function downloadOne(record, customName) {
+  const blob = new Blob([record.text], { type: 'text/markdown;charset=utf-8' });
+  triggerDownload(blob, customName || record.filename);
+}
+function downloadZipSelected() {
+  const records = getSelectedRecords();
+  if (!records.length) { setAlert('No chunks selected.', 'warn'); return; }
+  const useSeq = useSequentialNames();
+  try {
+    const entries = records.map((r, i) => ({
+      name: outputName(r, i + 1, records.length, useSeq),
+      data: enc.encode(r.text),
+    }));
+    const zipBytes = buildZip(entries);
+    const blob = new Blob([zipBytes], { type: 'application/zip' });
+    triggerDownload(blob, state.basename + '-chunks.zip');
+    setAlert('ZIP downloaded: ' + records.length + ' chunk' + (records.length === 1 ? '' : 's') +
+      ', ' + formatBytes(zipBytes.length) + (useSeq ? ' (sequential names)' : '') + '.', 'success');
+  } catch (e) {
+    setAlert('ZIP build failed: ' + e.message, 'error');
+  }
+}
+async function downloadIndividualSelected() {
+  const records = getSelectedRecords();
+  if (!records.length) { setAlert('No chunks selected.', 'warn'); return; }
+  const useSeq = useSequentialNames();
+  setAlert('Triggering ' + records.length + ' downloads...', 'info');
+  for (let i = 0; i < records.length; i++) {
+    const name = outputName(records[i], i + 1, records.length, useSeq);
+    downloadOne(records[i], name);
+    if (i < records.length - 1) await new Promise(r => setTimeout(r, 100));
+  }
+  setAlert('All ' + records.length + ' downloads triggered. Browser may require multi-download permission.', 'success');
+}
+
+function showProgress(title, indeterminate) {
+  const card = document.getElementById('progressCard');
+  card.classList.add('is-active');
+  document.getElementById('progressTitle').textContent = title || 'Working';
+  document.getElementById('progressMeta').textContent = indeterminate ? '' : '0%';
+  const fill = document.getElementById('progressFill');
+  fill.style.width = indeterminate ? '' : '0%';
+  fill.classList.toggle('is-indeterminate', !!indeterminate);
+}
+function updateProgress(ratio) {
+  document.getElementById('progressFill').style.width = Math.round(ratio * 100) + '%';
+  document.getElementById('progressMeta').textContent = Math.round(ratio * 100) + '%';
+}
+function hideProgress() {
+  document.getElementById('progressCard').classList.remove('is-active');
+}
+
+async function handleFile(file) {
+  if (!file) return;
+  const lc = file.name.toLowerCase();
+  if (!lc.endsWith('.md') && !lc.endsWith('.markdown')) {
+    setAlert('Only .md or .markdown files are supported.', 'error');
+    return;
+  }
+  if (state.chunks) for (let i = 0; i < state.chunks.length; i++) state.chunks[i] = null;
+  state.chunks = null;
+  state.selectedChunk = -1;
+  document.getElementById('results').classList.remove('is-active');
+  document.getElementById('chunkPanel').hidden = true;
+  setAlert('', null);
+  showProgress('Reading file', true);
+  try {
+    const text = await readFile(file);
+    const { lines, headingCounts } = analyzeFile(text);
+    state.file = file;
+    state.text = text;
+    state.lines = lines;
+    state.headingCounts = headingCounts;
+    state.basename = sanitizeBasename(file.name);
+    renderFileCard();
+  } catch (e) {
+    setAlert(e.message, 'error');
+  } finally {
+    hideProgress();
+  }
+}
+
+async function compute() {
+  if (!state.lines.length) { setAlert('Load a file first.', 'error'); return; }
+  document.getElementById('computeBtn').disabled = true;
+  showProgress('Splitting', false);
+  try {
+    let result;
+    if (state.mode === 'size') {
+      const value = parseInt(document.getElementById('sizeValue').value, 10);
+      const unit = document.getElementById('sizeUnit').value;
+      if (!Number.isFinite(value) || value < 1) throw new Error('Target size must be at least 1.');
+      const bytes = unit === 'MB' ? value * 1024 * 1024 : value * 1024;
+      if (bytes > 100 * 1024 * 1024) throw new Error('Target size cannot exceed 100 MB.');
+      result = await splitBySize(state.lines, bytes, updateProgress);
+    } else {
+      const lv = parseInt(document.getElementById('headingLevel').value, 10);
+      result = await splitByHeading(state.lines, lv, updateProgress);
+      if (!result.chunks.length) throw new Error('No headings at H' + lv + ' or shallower found.');
+    }
+    updateProgress(1);
+    const records = buildChunkRecords(result, state.mode, state.basename);
+    renderResults(records);
+  } catch (e) {
+    setAlert(e.message, 'error');
+    document.getElementById('results').classList.remove('is-active');
+  } finally {
+    document.getElementById('computeBtn').disabled = false;
+    hideProgress();
+  }
+}
+
+function resetToIntake() {
+  if (state.chunks) for (let i = 0; i < state.chunks.length; i++) state.chunks[i] = null;
+  state = {
+    file: null, text: '', lines: [], headingCounts: [0,0,0,0,0,0],
+    basename: '', chunks: null, selectedChunk: -1, mode: state.mode,
+  };
+  document.getElementById('fileCard').hidden = true;
+  document.getElementById('computeRow').hidden = true;
+  document.getElementById('results').classList.remove('is-active');
+  document.getElementById('chunkPanel').hidden = true;
+  document.getElementById('fileInput').value = '';
+  setAlert('', null);
+  moveSettingsTo('settings-slot-bottom');
+  document.getElementById('settingsBlock').open = false;
+  setBodyState('intake');
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  const sizeBtn = document.getElementById('modeSize');
+  const headBtn = document.getElementById('modeHeading');
+  sizeBtn.classList.toggle('is-active', mode === 'size');
+  sizeBtn.setAttribute('aria-checked', mode === 'size' ? 'true' : 'false');
+  headBtn.classList.toggle('is-active', mode === 'heading');
+  headBtn.setAttribute('aria-checked', mode === 'heading' ? 'true' : 'false');
+  document.getElementById('sizeField').hidden = mode !== 'size';
+  document.getElementById('headingField').hidden = mode !== 'heading';
+}
+
+function wire() {
+  const fileInput = document.getElementById('fileInput');
+  const dropZone = document.getElementById('dropZone');
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleFile(f);
+  });
+  ['dragenter','dragover'].forEach(ev => {
+    document.body.addEventListener(ev, e => {
+      e.preventDefault();
+      dropZone.classList.add('is-dragging');
+    });
+  });
+  ['dragleave','dragend'].forEach(ev => {
+    document.body.addEventListener(ev, e => {
+      e.preventDefault();
+      if (e.target === document.body || e.target === dropZone) dropZone.classList.remove('is-dragging');
+    });
+  });
+  document.body.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('is-dragging');
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  document.getElementById('replaceBtn').addEventListener('click', resetToIntake);
+  document.getElementById('modeSize').addEventListener('click', () => setMode('size'));
+  document.getElementById('modeHeading').addEventListener('click', () => setMode('heading'));
+  document.getElementById('computeBtn').addEventListener('click', compute);
+  document.getElementById('zipBtn').addEventListener('click', downloadZipSelected);
+  document.getElementById('individualBtn').addEventListener('click', downloadIndividualSelected);
+  document.getElementById('selectAllBtn').addEventListener('click', () => setAllSelection(true));
+  document.getElementById('deselectAllBtn').addEventListener('click', () => setAllSelection(false));
+  document.getElementById('excludeImagesBtn').addEventListener('click', excludeImagesNow);
+  document.getElementById('chunkToggleBtn').addEventListener('click', () => {
+    if (state.selectedChunk >= 0) toggleChunkSelection(state.selectedChunk);
+  });
+  document.getElementById('chunkDownloadBtn').addEventListener('click', () => {
+    if (state.selectedChunk >= 0 && state.chunks) {
+      const r = state.chunks[state.selectedChunk];
+      // Use original filename for single-chunk download (sequential rename applies
+      // only to bulk operations where ordering matters).
+      downloadOne(r);
+    }
+  });
+  const modal = document.getElementById('aboutModal');
+  document.getElementById('aboutLink').addEventListener('click', e => {
+    e.preventDefault();
+    if (typeof modal.showModal === 'function') modal.showModal();
+    else modal.setAttribute('open','');
+  });
+  document.getElementById('closeAbout').addEventListener('click', () => modal.close());
+  modal.addEventListener('click', e => {
+    const rect = modal.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right ||
+        e.clientY < rect.top  || e.clientY > rect.bottom) modal.close();
+  });
+}
+wire();
+</script>
+</body>
+</html>
